@@ -30,6 +30,7 @@ class BaseExp:
         self.mdl_real = None
         self.w = None
         self.phi = None
+        self.lh = {}
 
     def init_mdl_real(self, params):
         self.mdl_real = Base2DOF(self.args.m1, self.args.m2, params[0], params[1])
@@ -56,13 +57,13 @@ class BaseExp:
             optimizer = Adam(params, lr=self.args.lr, betas=(self.args.beta_1, self.args.beta_2))
         grad = NumericalDiff(self.loss, params)
         param_names = ['k1', 'k2']
-        lh = {}
         t1 = time.time()
-        # scheduler = StepLR(optimizer, step_size=5000, gamma=0.5)
-        # scheduler = MultiStepLR(optimizer, [5000, 10000, 15000], gamma=0.5)
-        scheduler = MultiStepLR(optimizer, [5000, 8000, 10000, 11000], gamma=0.1)
+        # scheduler = StepLR(optimizer, step_size=5000, gamma=0.5)  # 1
+        # scheduler = MultiStepLR(optimizer, [45000, 50000, 55000], gamma=0.5)  # 2,3
+        # scheduler = MultiStepLR(optimizer, [20000, 25000, 30000], gamma=0.5)  # 4
+        scheduler = MultiStepLR(optimizer, [2000, 15000, 20000, 25000], gamma=0.1)  # 5
         for epoch in range(self.args.num_epoch):
-            lh[epoch + 1] = {}
+            self.lh[epoch + 1] = {}
             grads = grad()  # Gradients
             if self.args.optimizer == 'GD':
                 optimizer.step(grads)
@@ -70,48 +71,51 @@ class BaseExp:
                 optimizer.step(grads, epoch + 1)
             loss = self.loss(params)
             for idx, param_name in enumerate(param_names):
-                lh[epoch + 1][param_name] = params[idx]
-            lh[epoch + 1]['Loss'] = loss
+                self.lh[epoch + 1][param_name] = params[idx]
+            self.lh[epoch + 1]['Loss'] = loss
             scheduler.step(epoch)
             if epoch % 100 == 0:
                 print('\033[1;32mEpoch: {:06d}\033[0m\t'
                       '\033[1;31mLoss: {:.8f}\033[0m\t'
-                      '\033[1;34mk1: {:.6f} k2:{:.6f}\033[0m\t'
+                      '\033[1;34mk1: {:.6f}\tk2:{:.6f}\033[0m\t'
                       '\033[1;33mLR: {:.5f}\033[0m'.format(epoch, loss, params[0], params[1], optimizer.lr))
             if loss <= self.args.tol:
                 break
         t2 = time.time()
         print('\033[1;33mTime cost: {:.2f}s\033[0m'.format(t2 - t1))
-        # lh = json.dumps(lh, indent=2)
-        # with open('./results/2dof/lh_L{}_{}_{}.json'.
-        #           format(self.args.norm, self.args.optimizer, self.args.lr), 'w') as f:
-        #     f.write(lh)
         return params
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    # parser.add_argument('--norm', default=1, type=int)
-    # parser.add_argument('--tol', default=1e-10, type=float)
-    # parser.add_argument('--num_epoch', default=50000, type=int)
-    # parser.add_argument('--optimizer', default='Adam', type=str)
-    # parser.add_argument('--lr', default=1, type=float)
-    parser.add_argument('--norm', default=2, type=int)
-    parser.add_argument('--tol', default=1e-20, type=float)
+    parser.add_argument('--norm', default=1, type=int)
+    parser.add_argument('--tol', default=1e-10, type=float)
+    parser.add_argument('--lr', default=1, type=float)
     parser.add_argument('--num_epoch', default=50000, type=int)
-    parser.add_argument('--optimizer', default='Adam', type=str)
-    parser.add_argument('--lr', default=0.1, type=float)
+    parser.add_argument('--optimizer', default='GD', type=str)
     parser.add_argument('--momentum', default=0.9, type=float)
     parser.add_argument('--beta_1', default=0.9, type=float)  # Beta1
     parser.add_argument('--beta_2', default=0.999, type=float)  # Beta2
     parser.add_argument('--lm', default=0.1, type=float)  # Lagrange multiplier
     parser.add_argument('--m1', default=10, type=float)  # Mass 1
     parser.add_argument('--m2', default=10, type=float)  # Mass 2
+    parser.add_argument('--lr_scheduler', action='store_true')
     args = parser.parse_args()
     exp = BaseExp(args)
     params_real = np.array([1000., 1000.])
     exp.init_mdl_real(params_real)
-    params_trial = np.array([569., 765.])
-    # params_trial = np.array([369., 165.])
+    # k1_0, k2_0 = 569., 765.
+    # k1_0, k2_0 = 1569., 1765.
+    # k1_0, k2_0 = 569., 1265.
+    # k1_0, k2_0 = 1586., 658.
+    k1_0, k2_0 = 100., 1800.  # lm=10
+    params_trial = np.array([k1_0, k2_0])
     params_pred = exp.train(params_trial)
-    print(params_pred)
+    err = np.linalg.norm(params_pred - params_real, ord=1)
+    exp.lh['Prediction'] = list(params_pred)
+    exp.lh['Error'] = err
+    print('\033[1;32mk1_pred: {}\tk2_pred: {}\tError:{}\033[0m'.format(params_pred[0], params_pred[1], err))
+    lh = json.dumps(exp.lh, indent=2)
+    with open('./results/2dof/L{}_{}_{}_{}_{}_{}.json'.
+              format(args.norm, args.optimizer, args.lr, args.tol, k1_0, k2_0), 'w') as f:
+        f.write(lh)
