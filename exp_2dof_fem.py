@@ -30,6 +30,7 @@ class BaseExp:
         self.mdl_real = None
         self.w = None
         self.phi = None
+        self.lh = {}
 
     def init_mdl_real(self, params):
         self.mdl_real = Base2DOF(self.args.rou, self.args.a, self.args.l, params[0])
@@ -56,12 +57,10 @@ class BaseExp:
             optimizer = Adam(params, lr=self.args.lr, betas=(self.args.beta_1, self.args.beta_2))
         grad = NumericalDiff(self.loss, params)
         param_names = ['E']
-        lh = {}
         t1 = time.time()
         scheduler = StepLR(optimizer, step_size=5000, gamma=0.1)
-        # scheduler = MultiStepLR(optimizer, [5000, 10000, 15000], gamma=0.5)
         for epoch in range(self.args.num_epoch):
-            lh[epoch + 1] = {}
+            self.lh[epoch + 1] = {}
             grads = grad()
             if self.args.optimizer == 'GD':
                 optimizer.step(grads)
@@ -69,8 +68,8 @@ class BaseExp:
                 optimizer.step(grads, epoch + 1)
             loss = self.loss(params)
             for idx, param_name in enumerate(param_names):
-                lh[epoch + 1][param_name] = params[idx]
-            lh[epoch + 1]['Loss'] = loss
+                self.lh[epoch + 1][param_name] = params[idx]
+            self.lh[epoch + 1]['Loss'] = loss
             scheduler.step(epoch)
             if epoch % 100 == 0:
                 print('\033[1;32mEpoch: {:06d}\033[0m\t'
@@ -81,10 +80,6 @@ class BaseExp:
                 break
         t2 = time.time()
         print('\033[1;33mTime cost: {:.2f}s\033[0m'.format(t2 - t1))
-        # lh = json.dumps(lh, indent=2)
-        # with open('./results/2dof_fem/lh_L{}_{}_{}.json'.
-        #           format(self.args.norm, self.args.optimizer, self.args.lr), 'w') as f:
-        #     f.write(lh)
         return params
 
 
@@ -106,6 +101,15 @@ if __name__ == '__main__':
     exp = BaseExp(args)
     params_real = np.array([2e5])
     exp.init_mdl_real(params_real)
-    params_trial = np.array([1.9e5])
+    # e_0 = 1.9e5
+    e_0 = 2.1e5
+    params_trial = np.array([e_0])
     params_pred = exp.train(params_trial)
-    print(params_pred)
+    err = np.linalg.norm(params_pred - params_real, ord=1)
+    exp.lh['Prediction'] = list(params_pred)
+    exp.lh['Error'] = err
+    print('\033[1;32mE_pred: {}\tError:{}\033[0m'.format(params_pred[0], err))
+    lh = json.dumps(exp.lh, indent=2)
+    with open('./results/2dof_fem/L{}_{}_{}_{}_{}.json'.
+              format(args.norm, args.optimizer, args.lr, args.tol, e_0), 'w') as f:
+        f.write(lh)
