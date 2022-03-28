@@ -14,9 +14,15 @@ clear;
 % [omega, phi] = solve_eigen(model_file, 10, params, mass);
 % py.numpy.save('./data/10dof_freq.npy', py.numpy.array(omega));
 % py.numpy.save('./data/10dof_mode_shape.npy', py.numpy.array(phi));
+% 50-DOF
+% mass = ones(1, 50);
+% params = 1000 * ones(1, 50);
+% [omega, phi] = solve_eigen(model_file, n, params, mass);
+% py.numpy.save('./data/50dof_freq.npy', py.numpy.array(omega));
+% py.numpy.save('./data/50dof_mode_shape.npy', py.numpy.array(phi));
 %%
 model_file = 'exp_truss';
 params = [2e4, 2.5e4, 3e4];
 [omega, phi] = solve_eigen(model_file, 11, params);
-% py.numpy.save('./data/truss_freq.npy', py.numpy.array(omega));
-% py.numpy.save('./data/truss_mode_shape.npy', py.numpy.array(phi));
+py.numpy.save('./data/truss_freq.npy', py.numpy.array(omega));
+py.numpy.save('./data/truss_mode_shape.npy', py.numpy.array(phi));
