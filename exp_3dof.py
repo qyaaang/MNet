@@ -27,6 +27,7 @@ class BaseExp:
 
     def __init__(self, args):
         self.args = args
+        self.lh = {}
 
     def init_mdl_real(self, params):
         self.mdl_real = Base3DOF(self.args.m, params[0])
@@ -53,12 +54,13 @@ class BaseExp:
             optimizer = Adam(params, lr=self.args.lr, betas=(self.args.beta_1, self.args.beta_2))
         grad = NumericalDiff(self.loss, params)
         param_names = ['k']
-        lh = {}
         t1 = time.time()
-        # scheduler = StepLR(optimizer, step_size=5000, gamma=0.5)
-        scheduler = MultiStepLR(optimizer, [5000, 10000, 35000], gamma=0.1)
+        if self.args.optimizer == "GD":
+            scheduler = StepLR(optimizer, step_size=5000, gamma=0.1)
+        else:
+            scheduler = MultiStepLR(optimizer, [5000, 15000], gamma=0.1)
         for epoch in range(self.args.num_epoch):
-            lh[epoch + 1] = {}
+            self.lh[epoch + 1] = {}
             grads = grad()
             if self.args.optimizer == 'GD':
                 optimizer.step(grads)
@@ -66,9 +68,10 @@ class BaseExp:
                 optimizer.step(grads, epoch + 1)
             loss = self.loss(params)
             for idx, param_name in enumerate(param_names):
-                lh[epoch + 1][param_name] = params[idx]
-            lh[epoch + 1]['Loss'] = loss
-            scheduler.step(epoch)
+                self.lh[epoch + 1][param_name] = params[idx]
+            self.lh[epoch + 1]['Loss'] = loss
+            if self.args.lr_scheduler:
+                scheduler.step(epoch)
             if epoch % 100 == 0:
                 print('\033[1;32mEpoch: {:06d}\033[0m\t'
                       '\033[1;31mLoss: {:.8f}\033[0m\t'
@@ -78,29 +81,35 @@ class BaseExp:
                 break
         t2 = time.time()
         print('\033[1;33mTime cost: {:.2f}s\033[0m'.format(t2 - t1))
-        # lh = json.dumps(lh, indent=2)
-        # with open('./results/3dof/lh_L{}_{}_{}.json'.
-        #           format(self.args.norm, self.args.optimizer, self.args.lr), 'w') as f:
-        #     f.write(lh)
         return params
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--norm', default=2, type=int)
-    parser.add_argument('--tol', default=1e-16, type=float)
+    parser.add_argument('--norm', default=1, type=int)
+    parser.add_argument('--tol', default=1e-10, type=float)
     parser.add_argument('--num_epoch', default=50000, type=int)
-    parser.add_argument('--optimizer', default='Adam', type=str)
-    parser.add_argument('--lr', default=0.1, type=float)
+    parser.add_argument('--optimizer', default='GD', type=str)
+    parser.add_argument('--lr', default=1, type=float)
     parser.add_argument('--momentum', default=0.9, type=float)
     parser.add_argument('--beta_1', default=0.9, type=float)  # Beta1
     parser.add_argument('--beta_2', default=0.999, type=float)  # Beta2
     parser.add_argument('--lm', default=0.1, type=float)  # Lagrange multiplier
     parser.add_argument('--m', default=10, type=float)  # Mass
+    parser.add_argument('--lr_scheduler', action='store_true')
     args = parser.parse_args()
     exp = BaseExp(args)
     params_real = np.array([1000.])
     exp.init_mdl_real(params_real)
-    params_trial = np.array([600.])
+    # k_0 = 569.
+    k_0 = 1265.
+    params_trial = np.array([k_0])
     params_pred = exp.train(params_trial)
-    print(params_pred)
+    err = np.linalg.norm(params_pred - params_real, ord=1)
+    exp.lh['Prediction'] = list(params_pred)
+    exp.lh['Error'] = err
+    print('\033[1;32mk_pred: {}\tError:{}\033[0m'.format(params_pred[0], err))
+    lh = json.dumps(exp.lh, indent=2)
+    with open('./results/3dof/L{}_{}_{}_{}_{}.json'.
+              format(args.norm, args.optimizer, args.lr, args.tol, k_0), 'w') as f:
+        f.write(lh)
