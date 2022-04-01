@@ -97,6 +97,7 @@ class BaseExp:
         self.args = args
         self.w = None
         self.phi = None
+        self.lh = {}
 
     def init_mdl_real(self):
         truss = TrussModel(np.array([self.args.E1, self.args.E2, self.args.E3]))
@@ -136,12 +137,13 @@ class BaseExp:
         self.load_dataset()
         grad = NumericalDiff(self.loss, params)
         param_names = ['E1', 'E2', 'E3']
-        lh = {}
         t1 = time.time()
-        # scheduler = StepLR(optimizer, step_size=5000, gamma=0.5)
-        scheduler = MultiStepLR(optimizer, [3000, 4000, 5000], gamma=0.1)
+        if self.args.optimizer == 'GD':
+            scheduler = MultiStepLR(optimizer, [3000, 3500, 4000, 4500], gamma=0.1)
+        else:
+            scheduler = MultiStepLR(optimizer, [20000, 21000], gamma=0.1)
         for epoch in range(self.args.num_epoch):
-            lh[epoch + 1] = {}
+            self.lh[epoch + 1] = {}
             grads = grad()  # Gradients
             if self.args.optimizer == 'GD':
                 optimizer.step(grads)
@@ -149,9 +151,10 @@ class BaseExp:
                 optimizer.step(grads, epoch + 1)
             loss = self.loss(params)
             for idx, param_name in enumerate(param_names):
-                lh[epoch + 1][param_name] = params[idx]
-            lh[epoch + 1]['Loss'] = loss
-            scheduler.step(epoch)
+                self.lh[epoch + 1][param_name] = params[idx]
+            self.lh[epoch + 1]['Loss'] = loss
+            if self.args.lr_scheduler:
+                scheduler.step(epoch)
             if epoch % 100 == 0:
                 print('\033[1;32mEpoch: {:06d}\033[0m\t'
                       '\033[1;31mLoss: {:.8f}\033[0m\t'
@@ -162,27 +165,16 @@ class BaseExp:
                 break
         t2 = time.time()
         print('\033[1;33mTime cost: {:.2f}s\033[0m'.format(t2 - t1))
-        # lh = json.dumps(lh, indent=2)
-        # with open('./results/truss/lh_L{}_{}_{}.json'.
-        #           format(self.args.norm, self.args.optimizer, self.args.lr), 'w') as f:
-        #     f.write(lh)
         return params
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    if 1:
-        parser.add_argument('--norm', default=1, type=int)
-        parser.add_argument('--tol', default=1e-10, type=float)
-        parser.add_argument('--num_epoch', default=50000, type=int)
-        parser.add_argument('--optimizer', default='GD', type=str)
-        parser.add_argument('--lr', default=10, type=float)
-    if 0:
-        parser.add_argument('--norm', default=2, type=int)
-        parser.add_argument('--tol', default=1e-20, type=float)
-        parser.add_argument('--num_epoch', default=50000, type=int)
-        parser.add_argument('--optimizer', default='Adam', type=str)
-        parser.add_argument('--lr', default=0.1, type=float)
+    parser.add_argument('--norm', default=1, type=int)
+    parser.add_argument('--tol', default=1e-10, type=float)
+    parser.add_argument('--num_epoch', default=50000, type=int)
+    parser.add_argument('--optimizer', default='GD', type=str)
+    parser.add_argument('--lr', default=10, type=float)
     parser.add_argument('--momentum', default=0.9, type=float)
     parser.add_argument('--beta_1', default=0.9, type=float)  # Beta1
     parser.add_argument('--beta_2', default=0.999, type=float)  # Beta2
@@ -190,9 +182,26 @@ if __name__ == '__main__':
     parser.add_argument('--E1', default=2e4, type=float)  # E1
     parser.add_argument('--E2', default=2.5e4, type=float)  # E2
     parser.add_argument('--E3', default=3e4, type=float)  # E3
+    parser.add_argument('--lr_scheduler', action='store_true')
+    parser.add_argument('--test', default=1, type=int)
     args = parser.parse_args()
     exp = BaseExp(args)
     exp.load_dataset()
-    params_trial = np.array([1.5e4, 3e4, 2.5e4], dtype=np.float32)
+    params_real = np.array([2e4, 2.5e4, 3e4]).astype(float)
+    if args.test == 1:
+        params_trial = np.array([1.5e4, 3e4, 2.5e4]).astype(float)  # 1
+    elif args.test == 2:
+        params_trial = np.array([2.5e4, 3e4, 2.5e4]).astype(float)  # 2
+    elif args.test == 3:
+        params_trial = np.array([2.3e4, 3.2e4, 3.1e4]).astype(float)  # 3
+    else:
+        params_trial = np.array([1.9e4, 2.3e4, 2.7e4]).astype(float)  # 4
     params_pred = exp.train(params_trial)
-    print(params_pred)
+    err = np.linalg.norm(params_pred - params_real, ord=1)
+    exp.lh['Prediction'] = list(params_pred)
+    exp.lh['Error'] = err
+    print('\033[1;32mParams_pred: {}\tError:{}\033[0m'.format(params_pred, err))
+    lh = json.dumps(exp.lh, indent=2)
+    with open('./results/truss/L{}_{}_{}_{}_truss_{}.json'.
+              format(args.norm, args.optimizer, args.lr, args.tol, args.test), 'w') as f:
+        f.write(lh)
