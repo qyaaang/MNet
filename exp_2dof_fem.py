@@ -58,7 +58,7 @@ class BaseExp:
         grad = NumericalDiff(self.loss, params)
         param_names = ['E']
         t1 = time.time()
-        scheduler = StepLR(optimizer, step_size=5000, gamma=0.1)
+        scheduler = MultiStepLR(optimizer, [15000], gamma=0.1)
         for epoch in range(self.args.num_epoch):
             self.lh[epoch + 1] = {}
             grads = grad()
@@ -70,7 +70,8 @@ class BaseExp:
             for idx, param_name in enumerate(param_names):
                 self.lh[epoch + 1][param_name] = params[idx]
             self.lh[epoch + 1]['Loss'] = loss
-            scheduler.step(epoch)
+            if self.args.lr_scheduler:
+                scheduler.step(epoch)
             if epoch % 100 == 0:
                 print('\033[1;32mEpoch: {:06d}\033[0m\t'
                       '\033[1;31mLoss: {:.8f}\033[0m\t'
@@ -97,6 +98,7 @@ if __name__ == '__main__':
     parser.add_argument('--rou', default=7.85e-9, type=float)  # Density
     parser.add_argument('--a', default=4000, type=float)  # Area
     parser.add_argument('--l', default=3000, type=float)  # Length
+    parser.add_argument('--lr_scheduler', action='store_true')
     args = parser.parse_args()
     exp = BaseExp(args)
     params_real = np.array([2e5])
