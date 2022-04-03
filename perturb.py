@@ -54,27 +54,21 @@ class Perturbation:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    if 1:
-        parser.add_argument('--norm', default=1, type=int)
-        parser.add_argument('--tol', default=1e-10, type=float)
-        parser.add_argument('--num_epoch', default=50000, type=int)
-        parser.add_argument('--optimizer', default='Adam', type=str)
-        parser.add_argument('--lr', default=1, type=float)
-    if 0:
-        parser.add_argument('--norm', default=2, type=int)
-        parser.add_argument('--tol', default=1e-20, type=float)
-        parser.add_argument('--num_epoch', default=50000, type=int)
-        parser.add_argument('--optimizer', default='Adam', type=str)
-        parser.add_argument('--lr', default=0.1, type=float)
+    parser.add_argument('--optimizer', default='GD', type=str)
+    parser.add_argument('--norm', default=1, type=int)
+    parser.add_argument('--tol', default=1e-10, type=float)
+    parser.add_argument('--lr', default=1, type=float)
+    parser.add_argument('--num_epoch', default=50000, type=int)
     parser.add_argument('--momentum', default=0.9, type=float)
     parser.add_argument('--beta_1', default=0.9, type=float)  # Beta1
     parser.add_argument('--beta_2', default=0.999, type=float)  # Beta2
     parser.add_argument('--lm', default=0.1, type=float)  # Lagrange multiplier
-    if 1:
+    # 2-DOF
+    if 0:
         from exp_2dof import BaseExp
         parser.add_argument('--model', default='2dof', type=str)  # Model
-        parser.add_argument('--m1', default=10, type=float)  # m1
-        parser.add_argument('--m2', default=10, type=float)  # m2
+        parser.add_argument('--m1', default=10, type=float)  # Mass 1
+        parser.add_argument('--m2', default=10, type=float)  # Mass 2
         args = parser.parse_args()
         exp = BaseExp(args)
         params_fixed = np.array([1000., 1000.])
@@ -82,16 +76,45 @@ if __name__ == '__main__':
         test = Perturbation(exp, params_fixed)
         perturb = test.gen_perturb(100, sigma=[0.1, 0.15])
         test.run_exp(perturb, params_trial)
+    # 2-DOF FEM
     if 0:
         from exp_2dof_fem import BaseExp
         parser.add_argument('--model', default='2dof_fem', type=str)  # Model
         parser.add_argument('--rou', default=7.85e-9, type=float)  # Density
         parser.add_argument('--a', default=4000, type=float)  # Area
         parser.add_argument('--l', default=3000, type=float)  # Length
+        parser.add_argument('--lr_scheduler', action='store_true')
         args = parser.parse_args()
         exp = BaseExp(args)
         params_fixed = np.array([2e5])
         params_trial = np.array([1.9e5])
+        test = Perturbation(exp, params_fixed)
+        perturb = test.gen_perturb(100, sigma=[0.1])
+        test.run_exp(perturb, params_trial)
+    # 3-DOF
+    if 0:
+        from exp_3dof import BaseExp
+        parser.add_argument('--model', default='3dof', type=str)  # Model
+        parser.add_argument('--m', default=10, type=float)  # Mass
+        parser.add_argument('--lr_scheduler', action='store_true')
+        args = parser.parse_args()
+        exp = BaseExp(args)
+        params_fixed = np.array([1000.])
+        params_trial = np.array([1265.])
+        test = Perturbation(exp, params_fixed)
+        perturb = test.gen_perturb(100, sigma=[0.1])
+        test.run_exp(perturb, params_trial)
+    # 3-DOF beam
+    if 1:
+        from exp_3dof_beam import BaseExp
+        parser.add_argument('--model', default='3dof_beam', type=str)  # Model
+        parser.add_argument('--m', default=100, type=float)  # Mass (kg)
+        parser.add_argument('--h', default=3, type=float)  # Length (m)
+        parser.add_argument('--lr_scheduler', action='store_true')
+        args = parser.parse_args()
+        exp = BaseExp(args)
+        params_fixed = np.array([1.25e5])
+        params_trial = np.array([1.2e5])
         test = Perturbation(exp, params_fixed)
         perturb = test.gen_perturb(100, sigma=[0.1])
         test.run_exp(perturb, params_trial)
